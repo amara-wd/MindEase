@@ -20,10 +20,10 @@ type CheckIn = {
   reflection: string
 }
 
-type ChatMessage = {
-  role: 'assistant' | 'user'
-  text: string
-}
+// type ChatMessage = {
+//   role: 'assistant' | 'user'
+//   text: string
+// }
 
 const STORAGE_KEY = 'mindease-checkins-v1'
 const MOODS = [
@@ -269,7 +269,7 @@ setNotice('Your check-in has been saved on this device.')
         : [...previous, factor],
     )
   }
-  const [isChatLoading, setIsChatLoading] = useState(false)
+  // const [isChatLoading, setIsChatLoading] = useState(false)
 
  
 // async function sendMessage(text = chatInput) {
