@@ -1,10 +1,11 @@
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState,useRef } from 'react'
+import ActivityPlanner from './ActivityPlanner'
 import {
   Activity, ArrowLeft, ArrowRight, Brain, Check, ChevronRight,
   Clock, Heart, History, Home, Leaf, MessageCircle, Pause, Play,
-  Plus, RotateCcw, Send, Settings, ShieldCheck, Sparkles, Trash2,
-  Wind, X,
+  Plus, RotateCcw, Settings, ShieldCheck, Sparkles, Trash2,
+  Wind, X,CalendarDays,
 } from 'lucide-react'
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -32,11 +33,13 @@ const MOODS = [
   { label: 'Good', face: 'Good', color: '#7E9ED5' },
   { label: 'Great', face: 'Great', color: '#478B70' },
 ]
+
 const FACTORS = ['Studies / work', 'Sleep', 'Relationships', 'Finances', 'Health', 'Other']
 const NAV = [
   { label: 'Overview', icon: Home },
   { label: 'Check-in', icon: Heart },
   { label: 'History', icon: History },
+    { label: 'Activity Planner', icon: CalendarDays },
   { label: 'Coping Toolkit', icon: Leaf },
   { label: 'AI Companion', icon: MessageCircle },
 ]
@@ -80,7 +83,7 @@ function getSuggestion(entry?: CheckIn) {
     return {
       title: 'Make room for rest',
       description: 'Try a short wind-down break. Dim distractions and give yourself a few quiet minutes.',
-      activity: 'Take a mindful break',
+     activity: 'Mindful breathing',
       reason: 'You selected sleep as a contributing factor',
     }
   }
@@ -112,6 +115,8 @@ function getSuggestion(entry?: CheckIn) {
 }
 
 function App() {
+  const followUpPromptRef = useRef<HTMLDivElement | null>(null)
+ const activityRef = useRef<HTMLDivElement | null>(null)
   const [page, setPage] = useState('Overview')
   const [checkIns, setCheckIns] = useState<CheckIn[]>(() => readCheckIns())
   const [stress, setStress] = useState(5)
@@ -122,14 +127,15 @@ function App() {
   const [activity, setActivity] = useState('Mindful breathing')
   const [breathing, setBreathing] = useState(false)
   const [breathSeconds, setBreathSeconds] = useState(0)
-  const [chatInput, setChatInput] = useState('')
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      text: 'Hi, I’m your MindEase companion. I can help you reflect on stress and explore general wellbeing activities. What has been on your mind today?',
-    },
-  ])
-
+  const [showFollowUpPrompt, setShowFollowUpPrompt] = useState(false)
+  // const [chatInput, setChatInput] = useState('')
+  // const [messages, setMessages] = useState<ChatMessage[]>([
+  //   {
+  //     role: 'assistant',
+  //     text: 'Hi, I’m your MindEase companion. I can help you reflect on stress and explore general wellbeing activities. What has been on your mind today?',
+  //   },
+  // ])
+const [checkInToDelete, setCheckInToDelete] = useState<string | null>(null)
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(checkIns))
   }, [checkIns])
@@ -139,7 +145,18 @@ function App() {
     const timer = window.setInterval(() => setBreathSeconds(s => s + 1), 1000)
     return () => window.clearInterval(timer)
   }, [breathing])
+useEffect(() => {
+  if (page !== 'Coping Toolkit') return
 
+  const timer = window.setTimeout(() => {
+    activityRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+  }, 100)
+
+  return () => window.clearTimeout(timer)
+}, [page, activity])
   const sorted = useMemo(
     () => [...checkIns].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [checkIns],
@@ -159,7 +176,14 @@ const thisWeekEntries = checkIns.filter(item => {
   const date = new Date(item.date)
   return date >= weekStart && date < weekEnd
 })
+useEffect(() => {
+  if (!showFollowUpPrompt) return
 
+  followUpPromptRef.current?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  })
+}, [showFollowUpPrompt])
 const weeklyCount = thisWeekEntries.length
 
 const weeklyAverageStress =
@@ -224,17 +248,19 @@ const commonFactor =
       reflection: reflection.trim(),
     }
     setCheckIns(previous => [entry, ...previous])
-    setNotice('Your check-in has been saved on this device.')
-    setReflection('')
-    setFactors([])
-    navigate('Overview')
+   setReflection('')
+setFactors([])
+navigate('Overview')
+setNotice('Your check-in has been saved on this device.')
   }
 
-  function deleteCheckIn(id: string) {
-    if (!window.confirm('Delete this check-in? This cannot be undone.')) return
-    setCheckIns(previous => previous.filter(item => item.id !== id))
-    setNotice('Check-in deleted.')
-  }
+ function deleteCheckIn(id: string) {
+  setCheckIns(previous =>
+    previous.filter(item => item.id !== id)
+  )
+
+  setNotice('Check-in deleted successfully.')
+}
 
   function toggleFactor(factor: string) {
     setFactors(previous =>
@@ -243,21 +269,71 @@ const commonFactor =
         : [...previous, factor],
     )
   }
+  const [isChatLoading, setIsChatLoading] = useState(false)
 
-  function sendMessage(text = chatInput) {
-    const cleaned = text.trim()
-    if (!cleaned) return
+ 
+// async function sendMessage(text = chatInput) {
+//   const cleaned = text.trim()
+//   if (!cleaned || isChatLoading) return
 
-    setMessages(previous => [
-      ...previous,
-      { role: 'user', text: cleaned },
-      {
-        role: 'assistant',
-        text: 'Thank you for sharing that with me. It may help to pause and name what feels most difficult right now. Would a short breathing exercise, a grounding activity, or writing down one small next step feel manageable? I can offer general wellbeing support, but I cannot diagnose or replace a mental health professional.',
-      },
-    ])
-    setChatInput('')
-  }
+//   setChatInput('')
+//   setIsChatLoading(true)
+
+//   // Add the user's message immediately.
+//   setMessages(previous => [
+//     ...previous,
+//     { role: 'user', text: cleaned },
+//   ])
+
+//   try {
+//    const controller = new AbortController()
+// const timeoutId = setTimeout(() => controller.abort(), 20000)
+
+// let response: Response
+
+// try {
+//   response = await fetch('http://127.0.0.1:8000/api/chat', {
+//     method: 'POST',
+//     headers: {
+//       'Content-Type': 'application/json',
+//     },
+//     body: JSON.stringify({ message: cleaned }),
+//     signal: controller.signal,
+//   })
+// } finally {
+//   clearTimeout(timeoutId)
+// }
+
+//     const data = await response.json()
+
+//     if (!response.ok) {
+//       throw new Error(
+//         typeof data.detail === 'string'
+//           ? data.detail
+//           : 'The AI service could not respond. Please try again.'
+//       )
+//     }
+
+//     // Display Gemini's actual response.
+//     setMessages(previous => [
+//       ...previous,
+//       { role: 'assistant', text: data.reply },
+//     ])
+//   } catch (error) {
+//     console.error('MindEase chat error:', error)
+
+//     setMessages(previous => [
+//       ...previous,
+//       {
+//         role: 'assistant',
+//         text: 'I could not connect to the AI service. Please check that the MindEase backend is running and try again.',
+//       },
+//     ])
+//   } finally {
+//     setIsChatLoading(false)
+//   }
+// }
+
 
   const pageTitle: Record<string, string> = {
     Overview: 'Your wellbeing overview',
@@ -265,8 +341,11 @@ const commonFactor =
     History: 'Your check-in history',
     'Coping Toolkit': 'Your coping toolkit',
     'AI Companion': 'Your AI companion',
+    'Activity Planner': 'Plan activities that support your wellbeing',
   }
-
+function handleActivityCompleted() {
+  setShowFollowUpPrompt(true)
+}
   return (
     <div className="min-h-screen bg-[#FAF9FE] text-[#29243A] md:flex">
       <aside className="border-b border-[#EEEAF5] bg-white p-4 md:fixed md:inset-y-0 md:flex md:w-[238px] md:flex-col md:border-b-0 md:border-r md:p-5">
@@ -409,9 +488,24 @@ const commonFactor =
                 <div className="my-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F1EAFE] text-[#7954C8]"><Leaf size={26} /></div>
                 <h3 className="text-lg font-semibold">{suggestion.title}</h3>
                 <p className="mt-2 text-sm leading-6 text-[#817B91]">{suggestion.description}</p>
-                <button onClick={() => { setActivity(suggestion.activity); navigate('Coping Toolkit') }} className="mt-5 flex items-center gap-2 text-sm font-semibold text-[#7954C8]">
-                  Try an activity <ArrowRight size={16} />
-                </button>
+             <div className="mt-5 flex flex-wrap gap-3">
+  <button
+    onClick={() => {
+      setActivity(suggestion.activity)
+      navigate('Coping Toolkit')
+    }}
+    className="flex items-center gap-2 rounded-xl bg-[#7954C8] px-4 py-3 text-sm font-semibold text-white hover:bg-[#6944B8]"
+  >
+    Try an activity <ArrowRight size={16} />
+  </button>
+
+  <button
+    onClick={() => navigate('Activity Planner')}
+    className="flex items-center gap-2 rounded-xl border border-[#E8E0F2] px-4 py-3 text-sm font-semibold text-[#7954C8] hover:bg-[#FCFAFF]"
+  >
+    <CalendarDays size={16} /> Plan an activity
+  </button>
+</div>
               </div>
             </section>
 
@@ -505,36 +599,208 @@ const commonFactor =
           </section>
         )}
 
-        {page === 'History' && (
-          <section className="rounded-2xl border border-[#F0ECF5] bg-white p-5 sm:p-6">
-            <div className="mb-5">
-              <h2 className="font-bold">All check-ins</h2>
-              <p className="mt-1 text-sm text-[#9A93A8]">{checkIns.length} saved {checkIns.length === 1 ? 'entry' : 'entries'} · newest first</p>
-            </div>
-            {sorted.length === 0 ? (
-              <EmptyState text="Your saved check-ins will appear here." action="Record your first check-in" onClick={() => navigate('Check-in')} />
-            ) : (
-              <div className="space-y-3">
-                {sorted.map(item => (
-                  <div key={item.id} className="rounded-xl border border-[#F0ECF5] p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs text-[#9A93A8]">{formatDateTime(item.date)}</p>
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <span className="rounded-lg bg-[#F1EAFE] px-3 py-1.5 text-sm font-bold text-[#7954C8]">Stress {item.stress}/10</span>
-                          <span className="rounded-lg bg-[#FCEAF4] px-3 py-1.5 text-sm text-[#A64E82]">Mood: {item.mood}</span>
-                        </div>
-                      </div>
-                      <button onClick={() => deleteCheckIn(item.id)} className="flex items-center gap-1 rounded-lg px-2 py-2 text-xs text-[#B45C70] hover:bg-[#FFF0F3]"><Trash2 size={15} /> Delete</button>
-                    </div>
-                    {item.factors.length > 0 && <p className="mt-3 text-sm text-[#817B91]">Factors: {item.factors.join(', ')}</p>}
-                    {item.reflection && <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#6F687F]">{item.reflection}</p>}
+       
+{page === 'History' && (
+  <section className="space-y-5">
+    {/* Header */}
+    <div className="rounded-2xl border border-[#F0ECF5] bg-white p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+         
+          <p className="mt-2 max-w-xl text-sm leading-6 text-[#817B91]">
+            Look back at your moods, stress levels, and reflections.
+            Every check-in is an opportunity to understand yourself better.
+          </p>
+        </div>
+
+        
+      </div>
+
+      {/* Summary */}
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-xl bg-[#F7F2FF] p-4">
+          <p className="text-sm text-[#817B91]">Total check-ins</p>
+          <p className="mt-1 text-2xl font-bold text-[#7954C8]">
+            {checkIns.length}
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-[#FCF2F7] p-4">
+          <p className="text-sm text-[#817B91]">Latest check-in</p>
+          <p className="mt-1 text-base font-semibold text-[#A64E82]">
+            {sorted.length > 0
+              ? formatDateTime(sorted[0].date)
+              : 'No check-ins yet'}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {/* Check-in list */}
+    <div className="rounded-2xl border border-[#F0ECF5] bg-white p-5 sm:p-6">
+      <div className="mb-5">
+        <h3 className="font-bold text-[#29243A]">Past check-ins</h3>
+        <p className="mt-1 text-sm text-[#9A93A8]">
+          {sorted.length === 0
+            ? 'Your saved entries will appear here.'
+            : 'Your most recent check-ins appear first.'}
+        </p>
+      </div>
+
+      {sorted.length === 0 ? (
+        <EmptyState
+          text="You haven't recorded a check-in yet. Take a moment to reflect on how you're feeling."
+          action="Record your first check-in"
+          onClick={() => navigate('Check-in')}
+        />
+      ) : (
+        <div className="space-y-4">
+          {sorted.map((item, index) => (
+            <article
+              key={item.id}
+              className="rounded-2xl border border-[#F0ECF5] p-4 transition hover:border-[#DCCCF8] hover:shadow-sm sm:p-5"
+            >
+              {/* Date and delete */}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-[#49366F]">
+                      {index === 0 ? 'Most recent check-in' : 'Check-in'}
+                    </span>
                   </div>
-                ))}
+                  <p className="mt-1 text-xs text-[#9A93A8]">
+                    {formatDateTime(item.date)}
+                  </p>
+                </div>
+
+                <button
+  onClick={() => setCheckInToDelete(item.id)}
+  aria-label="Delete this check-in"
+  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-[#B45C70] transition hover:bg-[#FFF0F3]"
+>
+  <Trash2 size={15} />
+  Delete
+</button>
               </div>
-            )}
-          </section>
-        )}
+
+              {/* Stress and mood */}
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="rounded-lg bg-[#F1EAFE] px-3 py-2 text-sm font-semibold text-[#7954C8]">
+                  Stress: {item.stress}/10
+                </span>
+
+                <span
+                  className="rounded-lg px-3 py-2 text-sm font-medium"
+                  style={{
+                    backgroundColor: `${getMoodColor(item.mood)}20`,
+                    color: getMoodColor(item.mood),
+                  }}
+                >
+                  Mood: {item.mood}
+                </span>
+              </div>
+
+              {/* Contributing factors */}
+              {item.factors.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#9A93A8]">
+                    Contributing factors
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {item.factors.map(factor => (
+                      <span
+                        key={factor}
+                        className="rounded-full border border-[#EAE3F2] bg-[#FCFAFF] px-3 py-1.5 text-xs text-[#6F687F]"
+                      >
+                        {factor}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Personal reflection */}
+              {item.reflection && (
+                <div className="mt-4 rounded-xl bg-[#FAF8FC] p-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#9A93A8]">
+                    Your reflection
+                  </p>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[#6F687F]">
+                    {item.reflection}
+                  </p>
+                </div>
+              )}
+
+              {!item.reflection && item.factors.length === 0 && (
+                <p className="mt-4 text-sm italic text-[#9A93A8]">
+                  No additional notes or contributing factors were added.
+                </p>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  </section>
+)}
+{checkInToDelete !== null && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-[#29243A]/40 p-4 backdrop-blur-sm"
+    onClick={() => setCheckInToDelete(null)}
+  >
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="delete-dialog-title"
+      aria-describedby="delete-dialog-description"
+      className="w-full max-w-md rounded-3xl border border-[#F0ECF5] bg-white p-6 shadow-xl sm:p-7"
+      onClick={event => event.stopPropagation()}
+    >
+      {/* Icon */}
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#FFF0F3] text-[#B45C70]">
+        <Trash2 size={25} />
+      </div>
+
+      {/* Message */}
+      <h2
+        id="delete-dialog-title"
+        className="mt-5 text-xl font-bold text-[#29243A]"
+      >
+        Delete this check-in?
+      </h2>
+
+      <p
+        id="delete-dialog-description"
+        className="mt-3 text-sm leading-6 text-[#817B91]"
+      >
+        Are you sure you want to delete this check-in? This will permanently
+        remove it from your saved history on this device. You cannot undo
+        this action.
+      </p>
+
+      {/* Actions */}
+      <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <button
+          onClick={() => setCheckInToDelete(null)}
+          className="rounded-xl border border-[#E8E0F2] px-5 py-3 text-sm font-semibold text-[#6F687F] transition hover:bg-[#FAF8FC]"
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={() => {
+            deleteCheckIn(checkInToDelete)
+            setCheckInToDelete(null)
+          }}
+          className="flex items-center justify-center gap-2 rounded-xl bg-[#B45C70] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#9E465B]"
+        >
+          <Trash2 size={15} />
+          Delete check-in
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
         {page === 'Coping Toolkit' && (
           <section>
@@ -549,7 +815,20 @@ const commonFactor =
                 { title: '5-4-3 grounding', detail: 'Reconnect with your surroundings through your senses.', icon: Leaf, time: '3 minutes' },
                 { title: 'Guided journaling', detail: 'Reflect on what you feel and what you need.', icon: Brain, time: '5 minutes' },
               ].map(item => (
-                <button key={item.title} onClick={() => { setActivity(item.title); setBreathSeconds(0); setBreathing(false) }} className={`rounded-2xl border bg-white p-5 text-left transition hover:border-[#C9B5EF] hover:shadow-sm ${activity === item.title ? 'border-[#BBA5EC] ring-1 ring-[#E5D9FF]' : 'border-[#F0ECF5]'}`}>
+                <button key={item.title} 
+               onClick={() => {
+  setActivity(item.title);
+  setBreathSeconds(0);
+  setBreathing(false);
+
+  setTimeout(() => {
+    activityRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  }, 100);
+}}
+                 className={`rounded-2xl border bg-white p-5 text-left transition hover:border-[#C9B5EF] hover:shadow-sm ${activity === item.title ? 'border-[#BBA5EC] ring-1 ring-[#E5D9FF]' : 'border-[#F0ECF5]'}`}>
                   <div className="mb-4 flex items-center justify-between">
                     <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F1EAFE] text-[#7954C8]"><item.icon size={23} /></span>
                     <span className="text-xs text-[#9A93A8]"><Clock className="mr-1 inline" size={13} />{item.time}</span>
@@ -561,7 +840,10 @@ const commonFactor =
               ))}
             </div>
 
-            <div className="mt-5 rounded-2xl border border-[#F0ECF5] bg-white p-5 sm:p-7">
+          <div
+  ref={activityRef}
+  className="mt-5 scroll-mt-6 rounded-2xl border border-[#F0ECF5] bg-white p-5 sm:p-7"
+>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-[#7954C8]">Selected activity</p>
@@ -594,32 +876,106 @@ const commonFactor =
           </section>
         )}
 
-        {page === 'AI Companion' && (
-          <section className="mx-auto max-w-3xl overflow-hidden rounded-2xl border border-[#F0ECF5] bg-white">
-            <div className="flex items-center gap-3 border-b border-[#F0ECF5] bg-[#FCFAFF] p-5">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F1EAFE] text-[#7954C8]"><Brain size={22} /></span>
-              <div><h2 className="font-bold">MindEase companion</h2><p className="mt-1 text-xs text-[#9A93A8]">Wellbeing conversation prototype · Not a live AI connection</p></div>
-            </div>
-            <div className="min-h-[300px] space-y-4 p-4 sm:p-6">
-              {messages.map((message, index) => (
-                <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[88%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === 'user' ? 'bg-[#7954C8] text-white' : 'bg-[#F5F1FC] text-[#554A6C]'}`}>{message.text}</div>
-                </div>
-              ))}
-            </div>
-            <div className="border-t border-[#F0ECF5] p-4">
-              <p className="mb-3 text-xs text-[#9A93A8]">Try a prompt</p>
-              <div className="mb-4 flex flex-wrap gap-2">
-                {['I feel stressed about studies', 'Help me take a mindful break', 'How can I reflect on today?'].map(prompt => <button key={prompt} onClick={() => sendMessage(prompt)} className="rounded-full border border-[#E9E0F5] px-3 py-2 text-xs text-[#7954C8] hover:bg-[#F7F2FF]">{prompt}</button>)}
-              </div>
-              <form onSubmit={e => { e.preventDefault(); sendMessage() }} className="flex gap-2">
-                <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Share what is on your mind..." className="min-w-0 flex-1 rounded-xl border border-[#EEEAF5] px-4 py-3 text-sm outline-none focus:border-[#B59BEA]" />
-                <button type="submit" aria-label="Send message" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#7954C8] text-white"><Send size={18} /></button>
-              </form>
-              <p className="mt-3 text-[11px] leading-5 text-[#A09AAC]">This demo uses predefined supportive responses, not an LLM. Do not share sensitive personal details. It is not a substitute for professional mental health care.</p>
-            </div>
-          </section>
-        )}
+        
+{page === 'AI Companion' && (
+  <section className="mx-auto flex min-h-[65vh] max-w-3xl items-center justify-center">
+    <div className="w-full overflow-hidden rounded-3xl border border-[#F0ECF5] bg-white text-center shadow-sm">
+      <div className="bg-gradient-to-br from-[#F3EEFF] via-[#FAF6FF] to-[#FDECF4] px-6 py-12 sm:px-12 sm:py-16">
+        <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-white text-[#7954C8] shadow-sm">
+          <Brain size={38} />
+        </span>
+
+        <span className="mt-6 inline-flex items-center rounded-full border border-[#DCCCF8] bg-white/80 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#7954C8]">
+          Coming Soon
+        </span>
+
+        <h2 className="mt-5 text-2xl font-bold tracking-tight text-[#29243A] sm:text-3xl">
+          Meet your MindEase Companion
+        </h2>
+
+        <p className="mx-auto mt-4 max-w-lg text-sm leading-7 text-[#777087] sm:text-base">
+          A supportive space to explore your thoughts, reflect on your day,
+          and discover small steps that may support your wellbeing.
+        </p>
+
+        <div className="mx-auto mt-8 grid max-w-md gap-3 text-left sm:grid-cols-2">
+          <div className="rounded-2xl border border-white bg-white/80 p-4">
+            <MessageCircle className="mb-3 text-[#7954C8]" size={21} />
+            <h3 className="text-sm font-semibold text-[#49366F]">
+              Supportive conversations
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-[#817B91]">
+              A place to put your thoughts into words.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-white bg-white/80 p-4">
+            <Sparkles className="mb-3 text-[#7954C8]" size={21} />
+            <h3 className="text-sm font-semibold text-[#49366F]">
+              Personal reflection
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-[#817B91]">
+              Explore gentle prompts and practical next steps.
+            </p>
+          </div>
+        </div>
+
+        <p className="mt-8 text-sm text-[#8C859C]">
+          We’re working on bringing this experience to life.
+        </p>
+
+        <button
+          onClick={() => navigate('Coping Toolkit')}
+          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#7954C8] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#6944B8]"
+        >
+          Explore Coping Toolkit
+          <ArrowRight size={16} />
+        </button>
+      </div>
+    </div>
+  </section>
+)}
+
+       {page === 'Activity Planner' && (
+  <>
+   {showFollowUpPrompt && (
+  <section
+    ref={followUpPromptRef}
+    className="mb-5 scroll-mt-6 rounded-2xl border border-[#E5D9FF] bg-[#F7F2FF] p-5 sm:p-6"
+  >
+        <h2 className="font-bold text-[#49366F]">
+          Take a moment to check in with yourself
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-[#777087]">
+          You completed an activity. Would you like to reflect on how you feel
+          now? There is no right or wrong answer, and this step is optional.
+        </p>
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            onClick={() => {
+              setShowFollowUpPrompt(false)
+              navigate('Check-in')
+            }}
+            className="rounded-xl bg-[#7954C8] px-4 py-3 text-sm font-semibold text-white hover:bg-[#6944B8]"
+          >
+            Start follow-up check-in
+          </button>
+
+          <button
+            onClick={() => setShowFollowUpPrompt(false)}
+            className="rounded-xl border border-[#E5D9FF] bg-white px-4 py-3 text-sm font-semibold text-[#7954C8]"
+          >
+            Maybe later
+          </button>
+        </div>
+      </section>
+    )}
+
+    <ActivityPlanner onActivityCompleted={handleActivityCompleted} />
+  </>
+)}
       </main>
     </div>
   )
